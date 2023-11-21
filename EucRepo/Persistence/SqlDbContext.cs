@@ -1,4 +1,5 @@
 using EucRepo.Models;
+using EucRepo.Persistence.EntityMapping;
 using Microsoft.EntityFrameworkCore;
 
 namespace EucRepo.Persistence;
@@ -23,22 +24,26 @@ public class SqlDbContext : DbContext
     public SqlDbContext(DbContextOptions<SqlDbContext> options) : base(options)
     {
     }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        //Set the default text type to VarChar, away from NVarChar
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+                     .SelectMany(e => e.GetProperties()
+                         .Where(p => p.ClrType == typeof(string))))
+        {
+            property.SetIsUnicode(false);
+        }
 
+        // Apply specific entity mapping configurations
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(SqlDbContext).Assembly);
+        
         modelBuilder.Entity<UtilityCalendarDay>().HasKey(p => new { p.Date });
         modelBuilder.Entity<UtilityCalendarDay>().Property(p => p.Date).HasColumnType("date");
 
-        modelBuilder.Entity<DaasEntitlement>().Property(p => p.Provisioned).HasColumnType("date");
-        modelBuilder.Entity<DaasEntitlement>().Property(p => p.LastSeen).HasColumnType("date");
-        modelBuilder.Entity<DaasEntitlementLog>().Property(p => p.Provisioned).HasColumnType("date");
       
 
         //Views
         modelBuilder.Entity<ModelsView.EFMigrationsHistory>(e => e.ToView("__EFMigrationsHistory").HasNoKey());
-        //Tables with triggers need to be declared so an older, slower access method can be used. .Net7 breaking change.
-        modelBuilder.Entity<DaasEntitlement>().ToTable(tb => tb.HasTrigger($"trg_{tb.Name}_Log"));
 
     }
 
