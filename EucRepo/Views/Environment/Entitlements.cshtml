@@ -1,0 +1,277 @@
+﻿@model EucRepo.ModelsView.DaasEntitlementsViewModel;
+@using EucRepo.TagHelpers;
+@using EucRepo.Helpers
+@{
+    /**/
+    ViewData["Title"] = "Entitlements";
+
+
+    var prevDisabled = Model.FirstPage ? "disabled" : "";
+    var nextDisabled = Model.LastPage ? "disabled" : "";
+    var newSortOrder = Model.FilterModel.Order is null or "desc" ? "asc" : "desc";
+    var sortModel = Model.FilterModel.SortByModel;
+    string? batchLinkText = null;
+    string? batchLinkUrl = null;
+    if (Model.ThisBatch is null)
+    {
+        batchLinkText = "create new";
+        batchLinkUrl = Url.Action("Manage", "Batch");
+    }
+    else
+    {
+        if (Model.ThisBatch!.CanEdit(User.Identity?.Name))
+        {
+            batchLinkText = "edit";
+            batchLinkUrl = Url.Action("Manage", "Batch", new { id = Model.ThisBatch!.Id });
+        }
+        else if (Model.ThisBatch!.CanView(User.Identity?.Name))
+        {
+            batchLinkText = "view";
+            batchLinkUrl = Url.Action("View", "Batch", new { id = Model.ThisBatch!.Id });
+        }
+    }
+
+
+}
+<h3>DaaS Entitlements</h3>
+
+<form method="get" asp-action="Entitlements" id="FilterForm" name="FilterForm" asp-controller="Environment">
+    <input type="hidden" name="OrderBy" value="@Model.FilterModel?.OrderBy"/>
+    <input type="hidden" name="Order" value="@Model.FilterModel?.Order"/>
+    <p>
+
+    </p>
+    <div class="row">
+        <div class="col-4">
+            <a asp-all-route-data="Model.SearchParams"
+               asp-route-Page="@(Model.FilterModel?.Page - 1)"
+               type="button" class="btn btn-secondary @prevDisabled">
+                Previous
+            </a>
+            <a asp-all-route-data="Model.SearchParams"
+               asp-route-Page="@(Model.FilterModel?.Page + 1)"
+               type="button" class="btn btn-secondary @nextDisabled">
+                Next
+            </a>
+            | Page <select name="Page" asp-items="@ViewBag.SelectPages" onchange="this.form.submit()" class="form-control-sm"></select> of @Model.TotalPages | Page size <select for="PageSize" name="PageSize" asp-items="@ViewBag.SelectPageSize" onchange="this.form.elements['Page'].value = ''; this.form.submit();" class="form-control-sm"></select>
+            <br/> Viewing @Model.StartRecord-@Model.EndRecord from @Model.FilteredRecords of @Model.TotalRecords records<br/>
+            Data last refreshed @Model.DataRefreshTime UTC (@Model.DataRefreshTime.ToRelativeTimeString() ago)
+
+        </div>
+        <div class="col-4">
+            <div class="form-row form-actions no-color">
+                <label class="col-sm-4 col-form text-right" for="FormModel_AdGroup">AD Group:</label>
+                <input type="text" id="FormModel_AdGroup" name="AdGroup" value="@Model.FilterModel?.AdGroup" search-options="@Model.SearchOptions["AdGroup"]" class="form-control-sm col-sm-6" autocomplete="off"/>
+            </div>
+            <div class="form-row form-actions no-color">
+                <label class="col-sm-4 col-form text-right" for="FormModel_MachineType">Machine Type:</label>
+                <input type="text" id="FormModel_MachineType" name="MachineType" value="@Model.FilterModel?.MachineType" search-options="@Model.SearchOptions["MachineType"]" class="form-control-sm col-sm-6" autocomplete="off"/><br/>
+            </div>
+            <div class="form-row form-actions no-color">
+                <label class="col-sm-4 col-form text-right" for="Batch">Batch:</label>
+                <select id="Batch" name="Batch"
+                        onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.Batch" asp-items="@ViewBag.SelectBatch">
+                    <option>Select</option>
+                </select>
+                @if (!string.IsNullOrEmpty(batchLinkUrl))
+                {
+                    <a href="@batchLinkUrl">@batchLinkText</a>
+                }
+                @if (!string.IsNullOrEmpty(Model.FilterModel?.Batch.ToString()))
+                {
+                    <p>
+                        <span style="font-style: italic">@Model.ThisBatch!.Description</span><br/>
+                        The current filter does not include @Model.BatchMissingEntries.Count entries from this batch. (<a id="missing-entries-toggle" href="javascript:toggleMissingEntries();">show</a>)<br/>
+                        <span id="missing-entries" class="visually-hidden">
+                            @foreach (var item in Model.BatchMissingEntries.Order())
+                            {
+                                @item
+                                <br/>
+                            }
+                        </span>
+                    </p>
+                }
+            </div>
+
+            <div class="form-row form-actions no-color">
+                <input type="submit" value="Search" class="btn btn-primary "/>
+                <input type="button" value="Clear" class="btn btn-secondary" onclick="this.form.elements['AdGroup'].value = '';this.form.elements['MachineType'].value = ''; this.form.submit();"/>
+                <a type="button" value="Full List" class="btn btn-secondary" href="@Context.Request.Path">Full List</a>
+
+            </div>
+        </div>
+     
+    </div>
+
+
+    <table class="table table-striped table-bordered table-hover table-sm" id="example">
+        <thead class="table-primary">
+        <tr>
+            <th onclick="setSorting('EmployeeID');">EmployeeID<sort-glyph column="EmployeeID" sort-by-model="@sortModel"></sort-glyph></th>
+            <th data-wenk="Employee status in Workday" data-wenk-pos="top"
+                onclick="setSorting('EmployeeStatus');">
+                Status<sort-glyph column="EmployeeStatus" sort-by-model="@sortModel"></sort-glyph>
+            </th>
+            <th onclick="setSorting('UserName');">UserName<sort-glyph column="UserName" sort-by-model="@sortModel"></sort-glyph></th>
+            <th onclick="setSorting('DcPair');">DcPair<sort-glyph column="DcPair" sort-by-model="@sortModel"></sort-glyph></th>
+            <th onclick="setSorting('DaasName');">DaasName<sort-glyph column="DaasName" sort-by-model="@sortModel"></sort-glyph></th>
+            <th onclick="setSorting('Os');">Os<sort-glyph column="Os" sort-by-model="@sortModel"></sort-glyph></th>
+            <th onclick="setSorting('DaysActive');">Days Active<sort-glyph column="DaysActive" sort-by-model="@sortModel"></sort-glyph></th>
+            <th data-wenk="The date the user was last seen with an active session. @Html.Raw((char)10)Earliest date 2021-10-21" data-wenk-pos="top"
+                onclick="setSorting('LastSeen');">
+                Last Seen<sort-glyph column="LastSeen" sort-by-model="@sortModel"></sort-glyph>
+            </th>
+            <th data-wenk="Day the user was provisioned in AD. @Html.Raw((char)10)Earliest date 2021-12-01" data-wenk-pos="top"
+                onclick="setSorting('Provisioned');">
+                Provisioned<sort-glyph column="Provisioned" sort-by-model="@sortModel"></sort-glyph>
+            </th>
+        </tr>
+        <tr>
+            <th></th>
+            <th></th>
+            <th>
+                <input id="UserName" name="UserName"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.UserName"/>
+            </th>
+            <th>
+                <input id="DcPair" name="DcPair"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.DcPair" search-options="@Model.SearchOptions["DcPair"]"/>
+            </th>
+            <th>
+                <input id="DaasName" name="DaasName"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.DaasName" search-options="@Model.SearchOptions["DaasName"]"/>
+            </th>
+            <th>
+                <select id="Os" name="Os"
+                        onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.Os" search-options="@Model.SearchOptions["Os"]">
+                </select>
+            </th>
+            <th>
+                <input id="DaysActive" name="DaysActive"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.DaysActive"/>
+            </th>
+            <th>
+                <input id="LastSeen" name="LastSeen" type="date" min="2021-10-21" max="@DateTime.Now.ToString("yyyy-MM-dd")" placeholder="yyyy-MM-dd"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.LastSeen"/>
+            </th>
+            <th>
+                <input id="Provisioned" name="Provisioned" type="date" min="2021-12-01" max="@DateTime.Now.ToString("yyyy-MM-dd")" placeholder="yyyy-MM-dd"
+                       onchange="this.form.elements['Page'].value = ''; this.form.submit();" value="@Model.FilterModel?.Provisioned"/>
+            </th>
+        </tr>
+        </thead>
+        @if (Model.DaasEntitlements != null)
+        {
+            foreach (var entry in Model.DaasEntitlements)
+            {
+                <tr>
+                    <td class="click-lanid-resolve">@entry.EmployeeId</td>
+                    <td>@entry.EmployeeStatus</td>
+                    <td>
+                        <a class="user-details click-eid-resolve" data-user-name="@Html.Encode(entry.UserName)" data-ad-group="@entry.AdGroup" href="#">@entry.UserName</a>
+                    </td>
+                    <td>@entry.DcPair</td>
+                    <td>@entry.DaasName</td>
+                    <td>@entry.Os</td>
+                    <td>@entry.DaysActive</td>
+                    <td>@entry.LastSeen?.ToString("yyyy-MM-dd")</td>
+                    <td>@entry.Provisioned.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+        }
+    </table>
+    <div class="row">
+        <div class="col-4">
+            <a asp-all-route-data="Model.SearchParams"
+               asp-route-Page="@(Model.FilterModel?.Page - 1)"
+               type="button" class="btn btn-secondary @prevDisabled">
+                Previous
+            </a>
+            <a asp-all-route-data="Model.SearchParams"
+               asp-route-Page="@(Model.FilterModel?.Page + 1)"
+               type="button" class="btn btn-secondary @nextDisabled">
+                Next
+            </a>
+        </div>
+        <div class="col-6">
+            <button class="btn btn-outline-info" id="SaveSearch">Save</button> these results to CSV.
+            <a asp-all-route-data="Model.SearchParams" asp-action="EntitlementsDataFeed">Data feed</a> link for use in Excel.
+        </div>
+    </div>
+</form>
+
+<div class="modal fade" id="popup-window" tabindex="-1" role="dialog" aria-labelledby="loadMeLabel" style="z-index:9990!important">
+    <div class="modal-dialog modal-lg modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                Loading... Please wait...
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="myModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="popup-window-content">
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts{
+    <script src="/lib/bootstrap-3-typeahead/bootstrap3-typeahead.min.js"></script>
+    <script>
+        let myModal = new bootstrap.Modal(document.getElementById("myModal"),{});
+        function setSorting(column) {
+            var currentColumn = '@Model.FilterModel?.OrderBy';
+            var sortOrder = '@newSortOrder';
+            if (column !== currentColumn) { sortOrder = 'asc'; }
+            document.FilterForm.elements['OrderBy'].value = column;
+            document.FilterForm.elements['Order'].value = sortOrder;
+            document.FilterForm.submit();
+        }
+        $("#SaveSearch").on("click", function (e) {
+            e.preventDefault();
+            let form =$("#FilterForm");
+            let currentAction = form.attr("action")
+            form.attr("action", "/Environment/EntitlementsDataFeed/csv");
+            // form.attr("method", "POST");
+            form.submit();
+            form.attr("action", currentAction);
+            form.attr("method", "GET");
+
+        });
+        $('#example').on("click", ".user-details", function (e) {
+            e.preventDefault();
+            let button = $(this);
+            let url = '';
+            url = encodeURI(url);
+                console.log(url);
+            // $("#popup-window").modal({
+            //     show: true //Display loader!
+            // });
+            myModal.show();
+            $("#popup-window-content").load(url);
+        });
+        function toggleMissingEntries() {
+            if (document.getElementById("missing-entries-toggle").innerText==="show") {
+                document.getElementById('missing-entries').classList.remove('visually-hidden');
+                document.getElementById("missing-entries-toggle").innerText="hide"
+            }
+            else {
+                document.getElementById('missing-entries').classList.add('visually-hidden');
+                document.getElementById("missing-entries-toggle").innerText="show"
+            }
+        }
+
+    </script>
+
+}

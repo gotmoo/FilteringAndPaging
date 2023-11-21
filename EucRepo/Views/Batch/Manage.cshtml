@@ -1,0 +1,181 @@
+@model ReportBatchForm
+@using EucRepo.Helpers;
+@{
+    ViewData["Title"] = "Edit collection";
+    var radioEmployeeId = Model.BatchTarget == ReportBatchTarget.EmployeeId ? "checked" : null;
+    var radioLanId = Model.BatchTarget == ReportBatchTarget.LanId ? "checked" : null;
+    var highLightClass = Model.BatchTarget == ReportBatchTarget.EmployeeId ? "highlight-employee-id" : "highlight-lan-id";
+}
+<link href="/lib/highlight-within-textarea/jquery.highlight-within-textarea.css" rel="stylesheet" />
+<style>
+    .blue {
+        border-radius: 3px;
+        background-color: #d0bfff;
+    }
+
+    .green {
+        border-radius: 3px;
+        background-color: #00ff90;
+    }
+</style>
+<form asp-action="Manage" id="batch-form" asp-route-id="@Model.Id" method="post">
+    <input type="hidden" asp-for="Id"/>
+    <input type="hidden" asp-for="CreatedBy"/>
+    <input type="hidden" asp-for="NewBatch"/>
+    <input type="hidden" asp-for="IsManaged" value="true"/>
+    <div class="row">
+        <div class="col" id="save-area">
+            <div class="mb-3">
+                About this batch
+            </div>
+            @if (Model.NewBatch)
+            {
+                <div>
+                    <p>Select whether you're providing LanID's or Employee ID's.</p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" asp-for="BatchTarget" id="1" value="1" data-name="EmployeeId" required="required">
+                        <label class="form-check-label" for="1">
+                            EmployeeId
+                        </label>
+
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" asp-for="BatchTarget" id="2" value="2" data-name="LanId" required="required">
+                        <label class="form-check-label" for="2">
+                            LanId
+                        </label>
+
+                    </div>
+                </div>
+            }
+            else
+            {
+                <input type="hidden" asp-for="BatchTarget"/>
+            }
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <input class="form-control" asp-for="Name" id="name" aria-describedby="nameHelp" required="required">
+                <div id="nameHelp" class="form-text">Something easy to remember.</div>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <input class="form-control" asp-for="Description" id="description" aria-describedby="descriptionHelp">
+                <div id="descriptionHelp" class="form-text">Describe it.</div>
+            </div>
+            <div class="row">
+                <div class="col-6">
+                    <label for="owners" class="form-label">List of editors</label>
+                    <textarea class="form-control highlight-lan-id" asp-for="Owners" id="owners" rows="6" aria-describedby="managerHelp" data-current-editor="@User.Identity?.Name" onblur="validateField(this)"></textarea>
+                    <div id="managerHelp" class="form-text">a list of domain usernames of who may edit this collection.</div>
+                </div>
+                <div class="col-6">
+                    <label for="viewers" class="form-label">List of viewers</label>
+                    <textarea class="highlight-lan-id form-control " asp-for="Viewers" id="viewers" rows="6" aria-describedby="viewerHelp"  data-type="LanId"></textarea>
+                    <div id="viewerHelp" class="form-text">a list of domain usernames of who may view this collection by selecting it from the dropdown.</div>
+                </div>
+            </div>
+            
+            <style>
+                        .save-area{ display: none !important;}
+                        input[type=checkbox]:checked ~ div.save-area { display: block;}
+                    </style>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" asp-for="IsVisibleWithLink" id="isVisible">
+                <label class="form-check-label " for="isVisible">Allow viewing of this batch with the link to anyone? Batch will not list in dropdowns</label>
+            </div>
+
+        </div>
+        <div class="col">
+            <div class="mb-3">
+                <label for="members" class="form-label"><span id="selected-target">List of @Model.BatchTarget</span></label>
+            </div>
+            <div class="mb-3">
+                
+                <textarea class="form-control my-high-light @highLightClass" asp-for="Members" id="members" rows="15" required="required" ></textarea>
+            </div>
+            <p>Note: valid entries for Editor, Viewers and collection members should be <span class="green">green</span> before saving.</p>
+            <button type="submit" class="btn btn-primary">Save</button> <a  class="btn btn-outline-info" role="button" asp-action="Index">Close</a> <a  class="btn btn-outline-danger" role="button" asp-action="Delete" asp-route-id="@Model.Id" >Delete</a>
+        </div>
+    </div>
+</form>
+@section Scripts
+{
+    <script src="/lib/highlight-within-textarea/jquery.highlight-within-textarea.js"></script>
+    <script type="text/javascript">
+    function caseInsensitiveSearch(array, searchValue){
+        const lowerSearchValue = searchValue.toLowerCase();
+        const index = array.findIndex(item => item.toLowerCase() === lowerSearchValue);
+        return index;
+    }
+    const batchForm = document.querySelector("#batch-form")
+    const batchRadios = Array.from(batchForm.querySelectorAll('input[type="radio"]'));
+    const batchTarget = batchForm.querySelector('#BatchTarget');
+    const membersBox = batchForm.querySelector('#members')
+    const membersLabel = batchForm.querySelector('#selected-target');
+    let highLightRegex = new RegExp(/(^([-\w]+\\[-\w]+[-\d]+)\s*$)/gm);
+    
+    function changeInputValidation() {
+        if (batchRadios.length > 0 && !batchRadios.some(radio => radio.checked)){
+            membersLabel.innerHTML = 'Select a LanID or EmployeeID first';
+            membersBox.disabled = true;
+            return;
+            }
+        membersBox.disabled = false;
+        const checkedType = batchRadios.filter(r => r.checked).length===0 
+            ? batchTarget.value     : batchRadios.filter(r => r.checked)[0].dataset.name ;
+        highLightRegex = checkedType === 'LanId' ? new RegExp(/(^([-\w]+\\[-\w]+[-\d]+)\s*$)/gm): new RegExp(/(^([-\d]{6})\s*$)/gm);
+        membersLabel.innerHTML = `Provide a list of ${checkedType}`;
+        membersBox.placeholder = checkedType === 'LanId' ?'Provide one per line of DOMAIN\\LanID:\nCORP\\e123456\nCORP\\e654321':'Provide one per line of EmployeeID\n12345\n54321';
+        $('.my-high-light').highlightWithinTextarea({
+            highlight: [
+                {
+                    highlight: highLightRegex,
+                    className: 'green'
+                }
+            ]
+        });
+    }
+    batchRadios.forEach(radio => radio.addEventListener('change', changeInputValidation));
+
+    
+     function validateField(field) {
+         // console.log(field)
+                let t = $(field)
+                // console.log(t.data("currentEditor"))
+                let lines = 0
+                // lines = t.val().trim().match(/^.*$/gm).length
+                // let u = t.val().trim().match(/(^([-\w]+\\[-\w]+)\s*$)/gm);
+                if (caseInsensitiveSearch(t.val().split(/\s+/),t.data("currentEditor")) < 0)
+                    {
+                        alert("You have removed your ID from editors, and you will not be able to edit after saving." );
+                     }
+                
+                // if (u) {
+                //     if (lines > u.length) {
+                //         console.log("Bad data in list of users")
+                //         $("#" + t.attr("data-notice-id")).html("Bad data in list of users")
+                //         return false;
+                //     } else {
+                //         $("#" + t.attr("data-notice-id")).html("good to submit " + u.length + " records")
+                //         console.log("good to submit " + u.length);
+                //         return true;
+                //     }
+                // } else {
+                //     $("#" + t.attr("data-notice-id")).html("Not enough to submit"); return false;
+                // }
+    
+            }
+            $(document).ready(function () {
+            
+                       changeInputValidation();
+
+                        // $("form").submit(function () {
+                        //
+                        //     if (onBlurCheck()) { return };
+                        //     event.preventDefault();
+                        // });
+            
+            
+                    });
+    </script>
+}

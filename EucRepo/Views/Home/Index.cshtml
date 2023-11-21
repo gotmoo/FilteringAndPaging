@@ -1,0 +1,16 @@
+﻿@{
+    ViewData["Title"] = "Welcome";
+}
+<h1>Hello!</h1>
+
+Create some batch collections:<br/>
+<a asp-controller="Batch" asp-action="CreateNewBatch" asp-route-target="EmployeeId" asp-route-memberCount="5000">Add 5000 Employee IDs</a><br/>
+<a asp-controller="Batch" asp-action="CreateNewBatch" asp-route-target="LanId" asp-route-memberCount="5000">Add 5000 UserNames</a><br/>
+
+<br/>
+Cool Searches:<br/>
+<a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="317989">EID with 7 records </a><br/>
+<a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="272949">EID with 2 records </a><br/>
+<a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\e309071">UserName with 5 records </a><br/>
+<a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\p219519">UserName with 5 records </a><br/>
+    

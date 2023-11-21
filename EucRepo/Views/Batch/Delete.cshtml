@@ -1,0 +1,19 @@
+@model EucRepo.Models.ReportBatch;
+@{
+    /**/
+    ViewData["Title"] = $"Collection Manager - Delete {Model.Name}";
+}
+<h2>@ViewData["Title"] </h2>
+<h5>@Model.Description</h5>
+<p>Are you sure you want to delete this collection? Some information:</p>
+<ul>
+    <li>It was created on @Model.Created by @Model.CreatedBy.</li>
+    <li>It has @Model.Members.Count members of type @Model.BatchTarget</li>
+    <li>Was last requested on @Model.LastRequested by @Model.LastRequestedBy</li>
+    <li>Has been requested @Model.Requests.Count(r => r.Requested >= DateTime.UtcNow.AddDays(-30)) times in the past 30 days</li>
+    </ul>
+<form asp-action="Delete" method="post">
+    <input type="hidden" name="Id" value="@Model.Id" />
+    <button type="submit" class="btn btn-danger">Yes, Delete!</button> <a  class="btn btn-info " role="button" asp-action="Manage" asp-route-id="@Model.Id">Cancel</a>
+</form>
+

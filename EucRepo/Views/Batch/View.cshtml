@@ -1,0 +1,21 @@
+@using EucRepo.Helpers
+@model EucRepo.Models.ReportBatch;
+<div>
+    <h2>@Model.Name</h2>
+    <h4>@Model.Description</h4>
+    <p>This batch contains @Model.Members.Count of type @Model.BatchTarget. It was last requested @Model.LastRequested.GetValueOrDefault().ToRelativeTimeString() ago by @Model.LastRequestedBy</p>
+
+    <div style="max-height: 200px; overflow-y: auto;">
+        @foreach (var member in Model.Members)
+        {
+            @member.EmployeeId@member.LanId<br/>
+        }
+    </div>
+    @if (Model.CanEdit(User.Identity?.Name))
+    {
+        <div>
+            <a asp-controller="Batch" asp-action="Manage" asp-route-id="@Model.Id">Edit</a> link here.
+        </div>
+    }
+<a  class="btn btn-outline-info" role="button" asp-action="Index">Close</a>
+    </div>
