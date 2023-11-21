@@ -6,6 +6,7 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using CsvHelper;
 using EucRepo.Helpers;
+using EucRepo.Interfaces;
 using EucRepo.Models;
 using EucRepo.ModelsExport;
 using EucRepo.ModelsFilter;
@@ -24,12 +25,14 @@ public class EnvironmentController : Controller
     private readonly SqlDbContext _context;
     private readonly IMapper _mapper;
     private readonly IConfiguration _configuration;
+    private readonly IDaasEntitlementRepository _daasEntitlement;
 
-    public EnvironmentController(SqlDbContext context, IMapper mapper, IConfiguration configuration)
+    public EnvironmentController(SqlDbContext context, IMapper mapper, IConfiguration configuration, IDaasEntitlementRepository daasEntitlement)
     {
         _context = context;
         _mapper = mapper;
         _configuration = configuration;
+        _daasEntitlement = daasEntitlement;
     }
 
     // GET
@@ -38,24 +41,14 @@ public class EnvironmentController : Controller
 
     [Authorize]
     [Route("[controller]/[action]/{id?}")]
-    public IActionResult EntitlementsDataFeed([FromQuery] DaasEntitlementsFilterModel? filterSort, string id = "json")
+    public async Task<IActionResult> EntitlementsDataFeed([FromQuery] DaasEntitlementsFilterModel? filterSort, string id = "json")
     {
         filterSort ??= new DaasEntitlementsFilterModel();
         var missingEntitlements = new List<DaasEntitlementExportModel>();
         var entitlements = _context.DaasEntitlements.AsQueryable();
         entitlements = FilterEntitlements(filterSort, entitlements);
         var userName = User.Identity?.Name??"";
-        var batch = _context.ReportBatches
-            .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
-            .FirstOrDefault(e =>
-                e.Id == filterSort.Batch && (
-                    e.IsVisibleWithLink ||
-                    _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                        .Contains(userName) ||
-                    _context.ReportBatchViewers.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                        .Contains(userName)
-                )
-            );
+        var batch = await _daasEntitlement.GetBatchByIdForUserAsync(filterSort.Batch, userName);
         if (filterSort.Batch is not null)
         {
             if (batch is null)
@@ -137,7 +130,7 @@ public class EnvironmentController : Controller
     }
 
     [Authorize]
-    public IActionResult Entitlements([FromQuery] DaasEntitlementsFilterModel? filterSort)
+    public async Task<IActionResult> Entitlements([FromQuery] DaasEntitlementsFilterModel? filterSort)
     {
         filterSort ??= new DaasEntitlementsFilterModel();
         var userName = User.Identity?.Name??"";
@@ -150,14 +143,7 @@ public class EnvironmentController : Controller
 
         var entitlements = _context.DaasEntitlements.AsQueryable();
         viewModel.TotalRecords = entitlements.Count();
-        var batches = _context.ReportBatches
-            .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
-            .Where(e =>
-                _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                    .Contains(userName) ||
-                _context.ReportBatchViewers.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                    .Contains(userName)
-            ).ToList();
+        var batches = await _daasEntitlement.GetBatchForUserAsync(userName);
         viewModel.Batches = batches;
 
         //Store search params for paging buttons. Loop through each of the populated values and store in dictionary

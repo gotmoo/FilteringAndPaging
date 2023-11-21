@@ -31,9 +31,7 @@
 
     <ItemGroup>
       <Folder Include="Endpoints\Datatables\" />
-      <Folder Include="Interfaces\" />
       <Folder Include="ModelsDataTables\" />
-      <Folder Include="Persistence\Repositories\" />
       <Folder Include="Persistence\SqlViews\" />
       <Folder Include="Service\" />
       <Folder Include="wwwroot\lib\chosen" />

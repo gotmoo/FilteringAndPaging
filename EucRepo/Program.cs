@@ -2,8 +2,10 @@ using System.Data.Common;
 using Bogus;
 using ChoETL;
 using EucRepo.Endpoints.Internal;
+using EucRepo.Interfaces;
 using EucRepo.Models;
 using EucRepo.Persistence;
+using EucRepo.Persistence.Repositories;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +28,8 @@ builder.Services.AddDbContext<SqlDbContext>(options =>
 builder.Services.Configure<ApiCallSettings>(builder.Configuration.GetSection(ApiCallSettings.Key));
 builder.Services.AddAutoMapper(typeof(Program));
 builder.Services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+builder.Services.AddScoped<IDaasEntitlementRepository, DaasEntitlementRepository>();
+
 builder.Services.AddControllersWithViews();
 
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
