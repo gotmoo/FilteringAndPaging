@@ -31,54 +31,13 @@
 
     <ItemGroup>
       <Folder Include="Endpoints\Datatables\" />
+      <Folder Include="Interfaces\" />
       <Folder Include="ModelsDataTables\" />
+      <Folder Include="Persistence\Repositories\" />
       <Folder Include="Persistence\SqlViews\" />
       <Folder Include="Service\" />
       <Folder Include="wwwroot\lib\chosen" />
     </ItemGroup>
 
-    <ItemGroup>
-      <_ContentIncludedByDefault Remove="Views\Compliance\AdComputer.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\AzureAd.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\ComputerDetail.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\Cylance.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\Dashboard.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\Index.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\Sccm.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\SepDlp.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\Tachyon.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\TaniumClients.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Compliance\TaniumEndpoints.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Applications\AdminAppAdd.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Applications\FieldEditPopup.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Applications\Index.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Applications\PackageDetails.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\Applications\Packages.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\AutomationScripts\Create.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\AutomationScripts\Edit.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\AutomationScripts\GetRevisionDetail.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\AutomationScripts\GetRevisions.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\AutomationScripts\Index.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\DaaSBoard\Index.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\DaaSBoard\PCapacityLineChart.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\DaaSBoard\pVdiCapacity.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\DaaSBoard\pVdiCapacityDaas.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\Index.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\RequestDetails.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\Requests.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\ScriptEdit.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\ScriptHistory.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\ScriptHistoryContents.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\Scripts.cshtml" />
-      <_ContentIncludedByDefault Remove="Views\ApiManager\SendFiles.cshtml" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\chart.html" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\chart.json" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\chart2.html" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\JsFormatter.js" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\Packages.html" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\selectize.html" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\selectizeIndex.js" />
-      <_ContentIncludedByDefault Remove="wwwroot\test\test2.html" />
-    </ItemGroup>
-
+  
 </Project>
