@@ -142,7 +142,7 @@ public class EnvironmentController : Controller
         };
 
         var entitlements = _context.DaasEntitlements.AsQueryable();
-        viewModel.TotalRecords = entitlements.Count();
+        viewModel.TotalRecords = await _daasEntitlement.GetTotalEntitlementsCountAsync();
         var batches = await _daasEntitlement.GetBatchForUserAsync(userName);
         viewModel.Batches = batches;
 
@@ -152,8 +152,7 @@ public class EnvironmentController : Controller
         //Filtering
         if (filterSort.Batch is not null)
         {
-            viewModel.ThisBatch = _context.ReportBatches.Include(r => r.Owners).Include(r => r.Viewers)
-                .FirstOrDefault(r => r.Id == filterSort.Batch);
+            viewModel.ThisBatch = await _daasEntitlement.GetBatchByIdAsync(filterSort.Batch);
             if (viewModel.ThisBatch is null)
             {
                 return BadRequest("The provided batch is not found.");
@@ -165,14 +164,8 @@ public class EnvironmentController : Controller
             }
             viewModel.ThisBatch.LastRequested = DateTime.UtcNow;
             viewModel.ThisBatch.LastRequestedBy = userName;
-            _context.ReportBatchRequests.Add(new ReportBatchRequest
-            {
-                ReportBatch = viewModel.ThisBatch,
-                RequestedBy = userName,
-                Requested = DateTime.UtcNow,
-                Page = "Entitlements"
-            });
-            _context.SaveChanges();
+            await _daasEntitlement.AddBatchRequestLogAsync(viewModel.ThisBatch, userName, "Entitlements");
+            
             if (!viewModel.Batches.Contains(viewModel.ThisBatch)) viewModel.Batches.Add(viewModel.ThisBatch);
 
             if (viewModel.ThisBatch.BatchTarget == ReportBatchTarget.EmployeeId)

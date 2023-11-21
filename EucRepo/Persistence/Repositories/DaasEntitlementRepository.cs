@@ -30,7 +30,14 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return batch;
     }
 
-    
+    public async Task<ReportBatch?> GetBatchByIdAsync(Guid? id)
+    {
+        if (id is null)
+            return null;
+        return await _context.ReportBatches.Include(r => r.Owners).Include(r => r.Viewers)
+            .FirstOrDefaultAsync(r => r.Id == id);
+    }
+
 
     public async Task<List<ReportBatch>> GetBatchForUserAsync(string userName)
     {
@@ -44,4 +51,20 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
             ).ToListAsync();
         return batches;
     }
+
+    public async Task<int> GetTotalEntitlementsCountAsync()
+    {
+        return await _context.DaasEntitlements.CountAsync();
+    }
+
+    public async Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page)
+    {
+        _context.ReportBatchRequests.Add(new ReportBatchRequest
+        {
+            ReportBatch = batch,
+            RequestedBy = userName,
+            Requested = DateTime.UtcNow,
+            Page = page
+        });
+        await _context.SaveChangesAsync();    }
 }
