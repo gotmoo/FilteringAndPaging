@@ -1,10 +1,11 @@
-﻿@{
+﻿@using EucRepo.ModelsFilter
+@{
     ViewData["Title"] = "Welcome";
 }
 <h1>Hello!</h1>
 
 <h2>Setup</h2>
-<a asp-controller="Setup" asp-action="ResetDatabase" >Create/Reset the database</a><br/>
+<a asp-controller="Setup" asp-action="ResetDatabase">Create/Reset the database</a><br/>
 Create some batch collections:<br/>
 <a asp-controller="Setup" asp-action="CreateNewBatch" asp-route-target="EmployeeId" asp-route-memberCount="5000">Add 5000 Employee IDs</a><br/>
 <a asp-controller="Setup" asp-action="CreateNewBatch" asp-route-target="LanId" asp-route-memberCount="5000">Add 5000 UserNames</a><br/>
@@ -15,5 +16,42 @@ Cool Searches:<br/>
 <a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="272949">EID with 2 records </a><br/>
 <a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\e309071">UserName with 5 records </a><br/>
 <a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\p219519">UserName with 5 records </a><br/>
-    
- 
+
+<table>
+    <tr>
+        <th>Batch</th>
+        <th>Page</th>
+        <th>Entitlements Data Feed JSON</th>
+        <th>Entitlements Data Feed CSV</th>
+    </tr>
+    <tr>
+        <td>50 Employees</td>
+        <td><a asp-controller="Environment" asp-action="Entitlements" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2">View</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2">View JSON</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2" asp-route-id="csv">View CSV</a></td>
+    </tr>
+    <tr>
+        <td>50 Employees with extra filter</td>
+        <td><a asp-controller="Environment" asp-action="Entitlements" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2" asp-route-dcPair="EMEA">View</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2" asp-route-dcPair="EMEA">View JSON</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="7903193A-7F34-4145-981E-5BA20125A2E2"  asp-route-dcPair="EMEA" asp-route-id="csv">View CSV</a></td>
+    </tr>
+    <tr>
+        <td>50 Employees Read-only</td>
+        <td><a asp-controller="Environment" asp-action="Entitlements" asp-route-batch="9AEEDE2D-5DBD-4A8E-898F-021756B83297">View</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="9AEEDE2D-5DBD-4A8E-898F-021756B83297">View JSON</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="9AEEDE2D-5DBD-4A8E-898F-021756B83297" asp-route-id="csv">View CSV</a></td>
+    </tr>
+    <tr>
+        <td>50 Employees View-only</td>
+        <td><a asp-controller="Environment" asp-action="Entitlements" asp-route-batch="830EA165-A451-4A99-AB8F-57129593E5CC">View</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="830EA165-A451-4A99-AB8F-57129593E5CC">View JSON</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="830EA165-A451-4A99-AB8F-57129593E5CC" asp-route-id="csv">View CSV</a></td>
+    </tr>
+    <tr>
+        <td>50 Users No access</td>
+        <td><a asp-controller="Environment" asp-action="Entitlements" asp-route-batch="1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0">View</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0">View JSON</a></td>
+        <td><a asp-controller="Environment" asp-action="EntitlementsDataFeed" asp-route-batch="1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0" asp-route-id="csv">View CSV</a></td>
+    </tr>
+</table>

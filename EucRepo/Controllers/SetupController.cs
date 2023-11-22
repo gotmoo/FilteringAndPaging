@@ -63,13 +63,51 @@ namespace EucRepo.Controllers
                 bulkInsert.WriteToServer(newEntitlements.AsDataTable());
             }
 
+            //Create a few batches
+            CreateBatch(ReportBatchTarget.EmployeeId, 5000, new Guid("213380BD-C7E8-47EB-8895-35CCB43D33C0"), "5000 Employees");
+            CreateBatch(ReportBatchTarget.EmployeeId, 50, new Guid("7903193A-7F34-4145-981E-5BA20125A2E2"), "50 Employees");
+            CreateBatch(ReportBatchTarget.LanId, 100, new Guid("0DA13CB0-97E1-43F0-A6FD-1F5A650309D7"), "100 Users");
+            CreateBatch(ReportBatchTarget.LanId, 50, new Guid("453E24A1-6D99-4F98-854A-6A240E708469"), "50 Users");
+            CreateBatch(ReportBatchTarget.EmployeeId, 50, new Guid("9AEEDE2D-5DBD-4A8E-898F-021756B83297"), "50 Employees Read-only");
+            CreateBatch(ReportBatchTarget.LanId, 50, new Guid("830EA165-A451-4A99-AB8F-57129593E5CC"), "50 Users View-only");
+            CreateBatch(ReportBatchTarget.LanId, 50, new Guid("1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0"), "50 Users No-Access");
+            CreateBatch(ReportBatchTarget.EmployeeId, 5000, null, null);
+            CreateBatch(ReportBatchTarget.LanId, 5000, null, null);
 
+            //No Access
+            var modifyBatch1 =
+                _context.ReportBatches.Include(r => r.Owners).FirstOrDefault(r => r.Id == new Guid("1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0"));
+            modifyBatch1.IsVisibleWithLink = false;
+            _context.ReportBatchOwners.Where(b => b.ReportBatch == modifyBatch1).ExecuteDelete();
+            //View-only
+            var modifyBatch2 =
+                _context.ReportBatches.Include(r => r.Owners).FirstOrDefault(r => r.Id == new Guid("830EA165-A451-4A99-AB8F-57129593E5CC"));
+            _context.ReportBatchOwners.Where(b => b.ReportBatch == modifyBatch2).ExecuteDelete();
+            //Read-only
+            var modifyBatch3 =
+                _context.ReportBatches.Include(r => r.Owners).FirstOrDefault(r => r.Id == new Guid("9AEEDE2D-5DBD-4A8E-898F-021756B83297"));
+
+            modifyBatch3.Viewers.Add(new ReportBatchViewer
+            {
+                ReportBatch = modifyBatch3,
+                UserName = modifyBatch3.CreatedBy
+            });
+            _context.ReportBatchOwners.Where(b => b.ReportBatch == modifyBatch3).ExecuteDelete();
+            _context.SaveChanges();
             return RedirectToAction(controllerName: "Home", actionName: "Index");
         }
 
         [Authorize]
-        public IActionResult CreateNewBatch(ReportBatchTarget target, int memberCount = 1000)
+        public IActionResult CreateNewBatch(ReportBatchTarget target, Guid? batchId, int memberCount = 1000)
         {
+            CreateBatch(target, memberCount, batchId, null);
+
+            return RedirectToAction(controllerName: "Home", actionName: "Index");
+        }
+
+        private void CreateBatch(ReportBatchTarget target, int memberCount, Guid? batchId, string? batchName)
+        {
+            
             List<ReportBatchOwner> owners = new List<ReportBatchOwner>
             {
                 new()
@@ -80,13 +118,14 @@ namespace EucRepo.Controllers
 
             var vm = new ReportBatch()
             {
-                Id = Guid.NewGuid(),
+                Id = batchId ?? Guid.NewGuid(),
                 CreatedBy = @User.Identity?.Name ?? string.Empty,
                 Owners = owners,
-                Name = NewNameGenerator.GenerateRandomName(),
+                Name = batchName ?? NewNameGenerator.GenerateRandomName(),
                 Description = $"A list of {memberCount} items of type {target}",
                 BatchTarget = target,
-                IsVisibleWithLink = true
+                IsVisibleWithLink = true,
+                Created = DateTime.UtcNow
             };
             _context.Add(vm);
             _context.SaveChanges();
@@ -119,8 +158,6 @@ namespace EucRepo.Controllers
                 default:
                     break;
             }
-
-            return RedirectToAction(controllerName: "Home", actionName: "Index");
         }
     }
 }
