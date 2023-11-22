@@ -1,5 +1,9 @@
-﻿using EucRepo.Interfaces;
+﻿using System.Diagnostics;
+using System.Web;
+using EucRepo.Helpers;
+using EucRepo.Interfaces;
 using EucRepo.Models;
+using EucRepo.ModelsFilter;
 using Microsoft.EntityFrameworkCore;
 
 namespace EucRepo.Persistence.Repositories;
@@ -34,7 +38,11 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
     {
         if (id is null)
             return null;
-        return await _context.ReportBatches.Include(r => r.Owners).Include(r => r.Viewers)
+        return await _context.ReportBatches
+            .Include(r => r.Owners)
+            .Include(r => r.Viewers)
+            .AsSplitQuery()
+            .Include(r => r.Members)
             .FirstOrDefaultAsync(r => r.Id == id);
     }
 
@@ -66,5 +74,245 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
             Requested = DateTime.UtcNow,
             Page = page
         });
-        await _context.SaveChangesAsync();    }
+        await _context.SaveChangesAsync();    
+        
+    }
+
+    public async Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel, string userName)
+    {
+        var dto = new DaasEntitlementsDto();
+        
+        var batchesViewEdit = await GetBatchForUserAsync(userName);
+
+        var entitlements = _context.DaasEntitlements.AsQueryable();
+        dto.TotalRecords = await entitlements.CountAsync();
+        
+        //Manage initial batch filtering
+        dto.ReportBatches = await GetBatchForUserAsync(userName);
+        if (filterModel.Batch is not null)
+        {
+            var batchId = filterModel.Batch.Value;
+            dto.ThisBatch = await GetBatchByIdAsync(batchId);
+            if (dto.ThisBatch!.CanEdit())
+                dto.ThisBatchAccess = "Edit";
+            else if (dto.ThisBatch!.CanView())
+                dto.ThisBatchAccess = "View";
+
+            switch (dto.ThisBatch.BatchTarget)
+            {
+                case ReportBatchTarget.EmployeeId:
+                    entitlements = entitlements.Where(e =>
+                        GetReportBatchEmployeeIds(batchId).Contains(e.EmployeeId));
+                    break;
+                case ReportBatchTarget.LanId:
+                    entitlements = entitlements.Where(e =>
+                        GetReportBatchUserNames(batchId)!.Contains(e.UserName));
+                    break;
+            }
+            await AddBatchRequestLogAsync(dto.ThisBatch, userName, "Entitlements");
+        }
+
+        entitlements = FilterEntitlements(filterModel, entitlements);
+        entitlements = SortDaasEntitlements(filterModel, entitlements);
+
+        dto.FilteredRecords = await entitlements.CountAsync();
+        dto.SearchOptions = await GetFilterListOptionsAsync(entitlements);
+
+        // Identify items from the batch that are not included in the final filtered set
+        if (filterModel.Batch is not null)
+        {
+            var batchId = filterModel.Batch.Value;
+            var entitlementsMissingCheck = entitlements;
+            switch (dto.ThisBatch!.BatchTarget)
+            {
+                case ReportBatchTarget.EmployeeId:
+                    dto.ThisBatchMissingEntries = await GetReportBatchEmployeeIds(batchId)
+                        .Select(b => b!.Value)
+                        .Where(b =>
+                            !entitlementsMissingCheck.Select(e => e.EmployeeId)
+                            .Contains(b)).Select(i => i.ToString())
+                        .Where(e => !string.IsNullOrWhiteSpace(e))
+                        .ToListAsync();
+                    break;
+                case ReportBatchTarget.LanId:
+                    var nullableResults = await GetReportBatchUserNames(batchId)!
+                        .Where(b =>
+                            !entitlementsMissingCheck.Select(e => e.UserName)
+                                .Contains(b))
+                        .Where(e => !string.IsNullOrWhiteSpace(e))
+                        .ToListAsync();
+                    dto.ThisBatchMissingEntries = nullableResults!;
+                    break;
+            }
+        }
+        
+        //Paging
+        dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements.AsNoTracking(),
+            filterModel.Page ?? 1, filterModel.PageSize);
+
+
+
+        return dto;
+
+    }
+
+    private IQueryable<string?>? GetReportBatchUserNames(Guid reportBatchId)
+    {
+        return _context.ReportBatchMembers
+            .Where(r => r.ReportBatch.Id == reportBatchId)
+            .Select(r => r.LanId).AsQueryable();
+    }
+    private IQueryable<int?> GetReportBatchEmployeeIds(Guid reportBatchId)
+    {
+        return _context.ReportBatchMembers
+            .Where(r => r.ReportBatch.Id == reportBatchId)
+            .Select(r => r.EmployeeId).AsQueryable();
+    }
+    
+    private static IQueryable<DaasEntitlement> FilterEntitlements(DaasEntitlementsFilterModel filterModel,
+        IQueryable<DaasEntitlement> entitlements)
+    {
+        filterModel ??= new DaasEntitlementsFilterModel();
+        if (!string.IsNullOrWhiteSpace(filterModel.AdGroup))
+            entitlements =
+                entitlements.Where(e => EF.Functions.Like(e.AdGroup ?? string.Empty, $"%{filterModel.AdGroup}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.DaasName))
+            entitlements = entitlements.Where(e =>
+                EF.Functions.Like(e.DaasName ?? string.Empty, $"%{filterModel.DaasName}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.DcPair))
+            entitlements =
+                entitlements.Where(e => EF.Functions.Like(e.DcPair ?? string.Empty, $"%{filterModel.DcPair}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.MachineType))
+            entitlements = entitlements.Where(e =>
+                EF.Functions.Like(e.MachineType ?? string.Empty, $"%{filterModel.MachineType}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.UserName))
+            entitlements = entitlements.Where(e =>
+                EF.Functions.Like(e.UserName ?? string.Empty, $"%{filterModel.UserName}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.Os))
+            entitlements = entitlements.Where(e => EF.Functions.Like(e.Os ?? string.Empty, $"%{filterModel.Os}%"));
+        if (!string.IsNullOrWhiteSpace(filterModel.LastSeen))
+            if (DateTime.TryParse(filterModel.LastSeen, out DateTime tryDate))
+                entitlements = entitlements.Where(e => e.LastSeen >= tryDate && e.LastSeen < (tryDate.AddDays(1)));
+        if (!string.IsNullOrWhiteSpace(filterModel.Provisioned))
+            if (DateTime.TryParse(filterModel.Provisioned, out DateTime tryDate))
+                entitlements =
+                    entitlements.Where(e => e.Provisioned >= tryDate && e.Provisioned < (tryDate.AddDays(1)));
+        if (!string.IsNullOrWhiteSpace(filterModel.DaysActive))
+        {
+            var decodedString = HttpUtility.HtmlDecode(filterModel.DaysActive);
+            if (int.TryParse(decodedString, out var activeNum))
+            {
+                entitlements = entitlements.Where(e => e.DaysActive == activeNum);
+            }
+            else if (decodedString.Length >= 2)
+            {
+                var filterOp = decodedString.Substring(0, 1);
+                var filterOn = decodedString.Substring(1);
+                if (int.TryParse(filterOn, out activeNum))
+                {
+                    switch (filterOp)
+                    {
+                        case ">":
+                            entitlements = entitlements.Where(e => e.DaysActive > activeNum);
+                            break;
+                        case "<":
+                            entitlements = entitlements.Where(e => e.DaysActive < activeNum);
+                            break;
+                        default:
+                            filterModel.DaysActive = "";
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                filterModel.DaysActive = "";
+            }
+        }
+
+        return entitlements;
+    }
+    
+    private static IQueryable<DaasEntitlement> SortDaasEntitlements(DaasEntitlementsFilterModel filterModel,
+        IQueryable<DaasEntitlement> entitlements)
+    {
+        filterModel.Order ??= "asc";
+        switch (filterModel.OrderBy)
+        {
+            case "EmployeeID":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.EmployeeId)
+                    : entitlements.OrderByDescending(e => e.EmployeeId);
+                break;
+            case "EmployeeStatus":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.EmployeeStatus)
+                    : entitlements.OrderByDescending(e => e.EmployeeStatus);
+                break;
+            case "UserName":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.UserName)
+                    : entitlements.OrderByDescending(e => e.UserName);
+                break;
+            case "DcPair":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.DcPair)
+                    : entitlements.OrderByDescending(e => e.DcPair);
+                break;
+            case "DaasName":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.DaasName)
+                    : entitlements.OrderByDescending(e => e.DaasName);
+                break;
+            case "Os":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.Os)
+                    : entitlements.OrderByDescending(e => e.Os);
+                break;
+            case "LastSeen":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.LastSeen)
+                    : entitlements.OrderByDescending(e => e.LastSeen);
+                break;
+            case "DaysActive":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.DaysActive)
+                    : entitlements.OrderByDescending(e => e.DaysActive);
+                break;
+            case "Provisioned":
+                entitlements = filterModel.Order == "asc"
+                    ? entitlements.OrderBy(e => e.Provisioned)
+                    : entitlements.OrderByDescending(e => e.Provisioned);
+                break;
+        }
+
+        return entitlements;
+    }
+
+    private async Task<Dictionary<string, string[]>> GetFilterListOptionsAsync(
+        IQueryable<DaasEntitlement> entitlements)
+    {
+        var filterListOptions = await entitlements.Select(d => new
+        {
+            d.AdGroup,
+            d.DaasName,
+            d.DcPair,
+            d.MachineType,
+            d.Os
+        }).Distinct().ToListAsync();
+        Dictionary<string, string[]> searchOptions = new();
+        searchOptions.Add("AdGroup",
+            filterListOptions.OrderBy(d => d.AdGroup).Select(d => d.AdGroup).Distinct().ToArray()!);
+        searchOptions.Add("DaasName",
+            filterListOptions.OrderBy(d => d.DaasName).Select(d => d.DaasName).Distinct().ToArray()!);
+        searchOptions.Add("DcPair",
+            filterListOptions.OrderBy(d => d.DcPair).Select(d => d.DcPair).Distinct().ToArray()!);
+        searchOptions.Add("MachineType",
+            filterListOptions.OrderBy(d => d.MachineType).Select(d => d.MachineType).Distinct().ToArray()!);
+        searchOptions.Add("Os", 
+            filterListOptions.OrderBy(d => d.Os).Select(d => d.Os).Distinct().ToArray()!);
+
+        return searchOptions;
+
+    }
 }

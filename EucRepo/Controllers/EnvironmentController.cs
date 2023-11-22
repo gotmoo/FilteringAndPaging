@@ -15,6 +15,7 @@ using EucRepo.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.EntityFrameworkCore;
 
 namespace EucRepo.Controllers;
@@ -135,21 +136,12 @@ public class EnvironmentController : Controller
         filterSort ??= new DaasEntitlementsFilterModel();
         var userName = User.Identity?.Name??"";
         var dataRefreshTime = DateTime.Now;
+
         var viewModel = new DaasEntitlementsViewModel
         {
             FilterModel = filterSort,
             DataRefreshTime = dataRefreshTime
         };
-
-        var entitlements = _context.DaasEntitlements.AsQueryable();
-        viewModel.TotalRecords = await _daasEntitlement.GetTotalEntitlementsCountAsync();
-        var batches = await _daasEntitlement.GetBatchForUserAsync(userName);
-        viewModel.Batches = batches;
-
-        //Store search params for paging buttons. Loop through each of the populated values and store in dictionary
-        viewModel.SearchParams = GetSearchParamsForPagingButtons(viewModel.FilterModel);
-
-        //Filtering
         if (filterSort.Batch is not null)
         {
             viewModel.ThisBatch = await _daasEntitlement.GetBatchByIdAsync(filterSort.Batch);
@@ -162,90 +154,30 @@ public class EnvironmentController : Controller
             {
                 return BadRequest("You don't have access to this batch.");
             }
-            viewModel.ThisBatch.LastRequested = DateTime.UtcNow;
-            viewModel.ThisBatch.LastRequestedBy = userName;
-            await _daasEntitlement.AddBatchRequestLogAsync(viewModel.ThisBatch, userName, "Entitlements");
-            
-            if (!viewModel.Batches.Contains(viewModel.ThisBatch)) viewModel.Batches.Add(viewModel.ThisBatch);
-
-            if (viewModel.ThisBatch.BatchTarget == ReportBatchTarget.EmployeeId)
-            {
-                var batchQueryEmployeeId = _context.ReportBatchMembers
-                    .Where(r => r.ReportBatch.Id == filterSort.Batch && r.EmployeeId != null)
-                    .Select(r => r.EmployeeId!.Value).AsQueryable();
-                entitlements = entitlements.Where(e =>
-                    batchQueryEmployeeId.Contains(e.EmployeeId));
-            }
-            else
-            {
-                var batchQueryLanId = _context.ReportBatchMembers.Where(r => r.ReportBatch.Id == filterSort.Batch)
-                    .Select(r => r.LanId).AsQueryable();
-                entitlements = entitlements.Where(e =>
-                    batchQueryLanId.Contains(e.UserName));
-            }
         }
 
-        entitlements = FilterEntitlements(viewModel.FilterModel, entitlements);
-        viewModel.FilteredRecords = entitlements.Count();
+       
+        var dto = await _daasEntitlement.GetEntitlementsWithPagingAsync(filterSort, userName);
 
-        //Select available options for datalist boxes. Store in dictionary
-        var filterListOptions = entitlements.Select(d => new
-        {
-            d.AdGroup,
-            d.DaasName,
-            d.DcPair,
-            d.MachineType,
-            d.Os
-        }).Distinct().ToList();
-        viewModel.SearchOptions.Add("AdGroup",
-            filterListOptions.OrderBy(d => d.AdGroup).Select(d => d.AdGroup).Distinct().ToArray()!);
-        viewModel.SearchOptions.Add("DaasName",
-            filterListOptions.OrderBy(d => d.DaasName).Select(d => d.DaasName).Distinct().ToArray()!);
-        viewModel.SearchOptions.Add("DcPair",
-            filterListOptions.OrderBy(d => d.DcPair).Select(d => d.DcPair).Distinct().ToArray()!);
-        viewModel.SearchOptions.Add("MachineType",
-            filterListOptions.OrderBy(d => d.MachineType).Select(d => d.MachineType).Distinct().ToArray()!);
-        viewModel.SearchOptions.Add("Os", filterListOptions.OrderBy(d => d.Os).Select(d => d.Os).Distinct().ToArray()!);
-        viewModel.SearchOptions.Add("Batch", batches.Select(b => b.Id.ToString()).ToArray()!);
-        //sorting
-        entitlements = SortDaasEntitlements(viewModel, entitlements);
+        viewModel.TotalRecords = dto.TotalRecords;
 
-        //extract items missing if this is a batch
-        if (filterSort.Batch is not null)
-        {
-            if (viewModel.ThisBatch?.BatchTarget == ReportBatchTarget.EmployeeId)
-            {
-                var batchQueryEmployeeId = _context.ReportBatchMembers
-                    .Where(r => r.ReportBatch.Id == filterSort.Batch && r.EmployeeId != null)
-                    .Select(r => r.EmployeeId!.Value).AsQueryable();
-                var missingEntries = batchQueryEmployeeId.Where(b =>
-                    !entitlements.Select(e => e.EmployeeId)
-                        .Contains(b));
-                //
-                viewModel.BatchMissingEntries = missingEntries.Select(i => i.ToString()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
-            }
-            else
-            {
-                var batchQueryLanId = _context.ReportBatchMembers.Where(r => r.ReportBatch.Id == filterSort.Batch)
-                    .Select(r => r.LanId).AsQueryable();
+        var batches = dto.ReportBatches;
+        viewModel.Batches = batches;
 
-                var missingEntries = batchQueryLanId.Where(b =>
-                    !entitlements.Select(e => e.UserName)
-                        .Contains(b));
-                viewModel.BatchMissingEntries = missingEntries.Where(e => !string.IsNullOrWhiteSpace(e)).ToList()!;
-            }
-        }
+        //Store search params for paging buttons. Loop through each of the populated values and store in dictionary
+        viewModel.SearchParams = GetSearchParamsForPagingButtons(viewModel.FilterModel);
+        viewModel.SearchOptions = dto.SearchOptions;
+        viewModel.FilteredRecords = dto.FilteredRecords;
+
+        viewModel.BatchMissingEntries = dto.ThisBatchMissingEntries;
 
         //Paging
-        var pagedRecords = PaginatedList<DaasEntitlement>.Create(entitlements.AsNoTracking(),
-            viewModel.FilterModel.Page ?? 1, viewModel.FilterModel.PageSize);
-
-        viewModel.DaasEntitlements = pagedRecords;
-        viewModel.StartRecord = pagedRecords.StartRecord;
-        viewModel.EndRecord = pagedRecords.EndRecord;
+        viewModel.DaasEntitlements = dto.PaginatedList;
+        viewModel.StartRecord = dto.PaginatedList!.StartRecord;
+        viewModel.EndRecord = dto.PaginatedList.EndRecord;
         viewModel.FirstPage = viewModel.FilterModel.Page == 1;
-        viewModel.LastPage = viewModel.FilteredRecords == pagedRecords.EndRecord;
-        viewModel.TotalPages = pagedRecords.TotalPages;
+        viewModel.LastPage = viewModel.FilteredRecords == dto.PaginatedList.EndRecord;
+        viewModel.TotalPages = dto.PaginatedList.TotalPages;
         viewModel.FilterModel.Page = viewModel.FilterModel.Page ?? 1;
         List<int> pageSizes = new List<int>
         {

@@ -1,4 +1,6 @@
 using EucRepo.Models;
+using EucRepo.ModelsFilter;
+using EucRepo.Persistence.Repositories;
 
 namespace EucRepo.Interfaces;
 
@@ -9,4 +11,5 @@ public interface IDaasEntitlementRepository
     Task<List<ReportBatch>> GetBatchForUserAsync(string userName);
     Task<int> GetTotalEntitlementsCountAsync();
     Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page);
+    Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel, string userName);
 }
