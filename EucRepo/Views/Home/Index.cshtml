@@ -3,9 +3,11 @@
 }
 <h1>Hello!</h1>
 
+<h2>Setup</h2>
+<a asp-controller="Setup" asp-action="ResetDatabase" >Create/Reset the database</a><br/>
 Create some batch collections:<br/>
-<a asp-controller="Batch" asp-action="CreateNewBatch" asp-route-target="EmployeeId" asp-route-memberCount="5000">Add 5000 Employee IDs</a><br/>
-<a asp-controller="Batch" asp-action="CreateNewBatch" asp-route-target="LanId" asp-route-memberCount="5000">Add 5000 UserNames</a><br/>
+<a asp-controller="Setup" asp-action="CreateNewBatch" asp-route-target="EmployeeId" asp-route-memberCount="5000">Add 5000 Employee IDs</a><br/>
+<a asp-controller="Setup" asp-action="CreateNewBatch" asp-route-target="LanId" asp-route-memberCount="5000">Add 5000 UserNames</a><br/>
 
 <br/>
 Cool Searches:<br/>
@@ -14,3 +16,4 @@ Cool Searches:<br/>
 <a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\e309071">UserName with 5 records </a><br/>
 <a asp-controller="Environment" asp-action="Entitlements" asp-route-UserName="ANYMOO\p219519">UserName with 5 records </a><br/>
     
+ 
