@@ -1,8 +1,12 @@
 ﻿using System.Diagnostics;
+using System.Text.RegularExpressions;
 using System.Web;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
 using EucRepo.Helpers;
 using EucRepo.Interfaces;
 using EucRepo.Models;
+using EucRepo.ModelsExport;
 using EucRepo.ModelsFilter;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,10 +15,12 @@ namespace EucRepo.Persistence.Repositories;
 public class DaasEntitlementRepository : IDaasEntitlementRepository
 {
     private readonly SqlDbContext _context;
+    private readonly IMapper _mapper;
 
-    public DaasEntitlementRepository(SqlDbContext context)
+    public DaasEntitlementRepository(SqlDbContext context, IMapper mapper)
     {
         _context = context;
+        _mapper = mapper;
     }
     public async Task<ReportBatch?> GetBatchByIdForUserAsync(Guid? id, string userName)
     {
@@ -49,7 +55,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
     public async Task<List<ReportBatch>> GetBatchForUserAsync(string userName)
     {
-        var batches  = await _context.ReportBatches
+        var batches  = await _context.ReportBatches.AsNoTracking()
             .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
             .Where(e =>
                 _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
@@ -78,39 +84,18 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         
     }
 
-    public async Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel, string userName)
+    public async Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel,
+        string userName, string callingPage)
     {
         var dto = new DaasEntitlementsDto();
-        
-        var batchesViewEdit = await GetBatchForUserAsync(userName);
 
         var entitlements = _context.DaasEntitlements.AsQueryable();
         dto.TotalRecords = await entitlements.CountAsync();
-        
+
         //Manage initial batch filtering
         dto.ReportBatches = await GetBatchForUserAsync(userName);
         if (filterModel.Batch is not null)
-        {
-            var batchId = filterModel.Batch.Value;
-            dto.ThisBatch = await GetBatchByIdAsync(batchId);
-            if (dto.ThisBatch!.CanEdit())
-                dto.ThisBatchAccess = "Edit";
-            else if (dto.ThisBatch!.CanView())
-                dto.ThisBatchAccess = "View";
-
-            switch (dto.ThisBatch.BatchTarget)
-            {
-                case ReportBatchTarget.EmployeeId:
-                    entitlements = entitlements.Where(e =>
-                        GetReportBatchEmployeeIds(batchId).Contains(e.EmployeeId));
-                    break;
-                case ReportBatchTarget.LanId:
-                    entitlements = entitlements.Where(e =>
-                        GetReportBatchUserNames(batchId)!.Contains(e.UserName));
-                    break;
-            }
-            await AddBatchRequestLogAsync(dto.ThisBatch, userName, "Entitlements");
-        }
+           entitlements = await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements, callingPage);
 
         entitlements = FilterEntitlements(filterModel, entitlements);
         entitlements = SortDaasEntitlements(filterModel, entitlements);
@@ -120,40 +105,123 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
         // Identify items from the batch that are not included in the final filtered set
         if (filterModel.Batch is not null)
-        {
-            var batchId = filterModel.Batch.Value;
-            var entitlementsMissingCheck = entitlements;
-            switch (dto.ThisBatch!.BatchTarget)
-            {
-                case ReportBatchTarget.EmployeeId:
-                    dto.ThisBatchMissingEntries = await GetReportBatchEmployeeIds(batchId)
-                        .Select(b => b!.Value)
-                        .Where(b =>
-                            !entitlementsMissingCheck.Select(e => e.EmployeeId)
-                            .Contains(b)).Select(i => i.ToString())
-                        .Where(e => !string.IsNullOrWhiteSpace(e))
-                        .ToListAsync();
-                    break;
-                case ReportBatchTarget.LanId:
-                    var nullableResults = await GetReportBatchUserNames(batchId)!
-                        .Where(b =>
-                            !entitlementsMissingCheck.Select(e => e.UserName)
-                                .Contains(b))
-                        .Where(e => !string.IsNullOrWhiteSpace(e))
-                        .ToListAsync();
-                    dto.ThisBatchMissingEntries = nullableResults!;
-                    break;
-            }
-        }
-        
+             await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+
         //Paging
         dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements.AsNoTracking(),
             filterModel.Page ?? 1, filterModel.PageSize);
 
-
-
         return dto;
+    }
 
+    public async Task<DaasEntitlementsDto> GetEntitlementsAsync(DaasEntitlementsFilterModel filterModel, string userName, string callingPage)
+    {
+        var dto = new DaasEntitlementsDto();
+
+        var entitlements = _context.DaasEntitlements.AsNoTracking().AsQueryable();
+        dto.TotalRecords = await entitlements.CountAsync();
+        dto.ReportBatches = await GetBatchForUserAsync(userName);
+
+        //Manage initial batch filtering
+        if (filterModel.Batch is not null)
+            entitlements = await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements, callingPage);
+
+        entitlements = FilterEntitlements(filterModel, entitlements);
+        entitlements = SortDaasEntitlements(filterModel, entitlements);
+        var results = await entitlements.AsNoTracking()
+            .ProjectTo<DaasEntitlementExportModel>(_mapper.ConfigurationProvider).ToListAsync();
+
+        // Identify items from the batch that are not included in the final filtered set
+        if (filterModel.Batch is not null)
+        {
+            await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+            var missingEntitlements = new List<DaasEntitlementExportModel>();
+            switch (dto.ThisBatch!.BatchTarget)
+            {
+                case ReportBatchTarget.EmployeeId:
+                    foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
+                    {
+                        missingEntitlements.Add(new DaasEntitlementExportModel()
+                        {
+                            UserName = "",
+                            EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
+                            DaasName = "NotFound",
+                            MachineType = "NotFound"
+                        });
+                    }
+
+                    break;
+                case ReportBatchTarget.LanId:
+                    foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
+                    {
+                        missingEntitlements.Add(new DaasEntitlementExportModel()
+                        {
+                            UserName = missingEntry,
+                            EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
+                            DaasName = "NotFound",
+                            MachineType = "NotFound"
+                        });
+                    }
+                    break;
+            }
+            results.AddRange(missingEntitlements);
+        }
+
+        dto.ExportDaasEntitlements = results;
+        return dto;
+    }
+
+    private async Task GetBatchMembersMissingFromFilteredData(Guid batchId,
+        IQueryable<DaasEntitlement> entitlements, DaasEntitlementsDto dto)
+    {
+        var entitlementsMissingCheck = entitlements;
+        switch (dto.ThisBatch!.BatchTarget)
+        {
+            case ReportBatchTarget.EmployeeId:
+                dto.ThisBatchMissingEntries = await GetReportBatchEmployeeIds(batchId)
+                    .Select(b => b!.Value)
+                    .Where(b =>
+                        !entitlementsMissingCheck.Select(e => e.EmployeeId)
+                            .Contains(b)).Select(i => i.ToString())
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .ToListAsync();
+                break;
+            case ReportBatchTarget.LanId:
+                var nullableResults = await GetReportBatchUserNames(batchId)!
+                    .Where(b =>
+                        !entitlementsMissingCheck.Select(e => e.UserName)
+                            .Contains(b))
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .ToListAsync();
+                dto.ThisBatchMissingEntries = nullableResults!;
+                break;
+        }
+    }
+
+    private async Task<IQueryable<DaasEntitlement>> FilterEntitlementsOnBatchMembers(Guid batchId, string userName,
+        DaasEntitlementsDto dto, IQueryable<DaasEntitlement> entitlements, string callingPage)
+    {
+        dto.ThisBatch = await GetBatchByIdAsync(batchId);
+        if (dto.ThisBatch!.CanEdit())
+            dto.ThisBatchAccess = "Edit";
+        else if (dto.ThisBatch!.CanView())
+            dto.ThisBatchAccess = "View";
+
+        switch (dto.ThisBatch.BatchTarget)
+        {
+            case ReportBatchTarget.EmployeeId:
+                entitlements = entitlements.Where(e =>
+                    GetReportBatchEmployeeIds(batchId).Contains(e.EmployeeId));
+                break;
+            case ReportBatchTarget.LanId:
+                entitlements = entitlements.Where(e =>
+                    GetReportBatchUserNames(batchId)!.Contains(e.UserName));
+                break;
+        }
+
+        await AddBatchRequestLogAsync(dto.ThisBatch, userName, callingPage);
+        
+        return entitlements;
     }
 
     private IQueryable<string?>? GetReportBatchUserNames(Guid reportBatchId)

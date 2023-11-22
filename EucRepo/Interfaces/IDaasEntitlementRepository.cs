@@ -11,5 +11,6 @@ public interface IDaasEntitlementRepository
     Task<List<ReportBatch>> GetBatchForUserAsync(string userName);
     Task<int> GetTotalEntitlementsCountAsync();
     Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page);
-    Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel, string userName);
+    Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel, string userName, string callingPage);
+    Task<DaasEntitlementsDto> GetEntitlementsAsync(DaasEntitlementsFilterModel filterModel, string userName, string callingPage);
 }
