@@ -68,7 +68,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
     {
         var dto = new DaasEntitlementsDto();
 
-        var entitlements = _context.DaasEntitlements.AsQueryable();
+        var entitlements = _context.DaasEntitlements.AsNoTracking().AsQueryable();
         dto.TotalRecords = await entitlements.CountAsync();
 
         //Manage initial batch filtering
@@ -87,7 +87,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
              await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
 
         //Paging
-        dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements.AsNoTracking(),
+        dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements,
             filterModel.Page ?? 1, filterModel.PageSize);
 
         return dto;
