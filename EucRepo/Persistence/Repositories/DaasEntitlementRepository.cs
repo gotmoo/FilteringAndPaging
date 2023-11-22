@@ -22,23 +22,6 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         _context = context;
         _mapper = mapper;
     }
-    public async Task<ReportBatch?> GetBatchByIdForUserAsync(Guid? id, string userName)
-    {
-        if (id is null) 
-            return null;
-        var batch = await _context.ReportBatches
-            .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
-            .FirstOrDefaultAsync(e =>
-                e.Id == id && (
-                    e.IsVisibleWithLink ||
-                    _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                        .Contains(userName) ||
-                    _context.ReportBatchViewers.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                        .Contains(userName)
-                )
-            );
-        return batch;
-    }
 
     public async Task<ReportBatch?> GetBatchByIdAsync(Guid? id)
     {
@@ -53,7 +36,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
     }
 
 
-    public async Task<List<ReportBatch>> GetBatchForUserAsync(string userName)
+    private async Task<List<ReportBatch>> GetBatchForUserAsync(string userName)
     {
         var batches  = await _context.ReportBatches.AsNoTracking()
             .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
@@ -66,12 +49,8 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return batches;
     }
 
-    public async Task<int> GetTotalEntitlementsCountAsync()
-    {
-        return await _context.DaasEntitlements.CountAsync();
-    }
-
-    public async Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page)
+   
+    private async Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page)
     {
         _context.ReportBatchRequests.Add(new ReportBatchRequest
         {
@@ -134,41 +113,50 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         // Identify items from the batch that are not included in the final filtered set
         if (filterModel.Batch is not null)
         {
-            await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
-            var missingEntitlements = new List<DaasEntitlementExportModel>();
-            switch (dto.ThisBatch!.BatchTarget)
-            {
-                case ReportBatchTarget.EmployeeId:
-                    foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
-                    {
-                        missingEntitlements.Add(new DaasEntitlementExportModel()
-                        {
-                            UserName = "",
-                            EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
-                            DaasName = "NotFound",
-                            MachineType = "NotFound"
-                        });
-                    }
-
-                    break;
-                case ReportBatchTarget.LanId:
-                    foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
-                    {
-                        missingEntitlements.Add(new DaasEntitlementExportModel()
-                        {
-                            UserName = missingEntry,
-                            EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
-                            DaasName = "NotFound",
-                            MachineType = "NotFound"
-                        });
-                    }
-                    break;
-            }
+            var missingEntitlements = await GetMissingEntitlementsForBatchMembersAsync(filterModel, entitlements, dto);
             results.AddRange(missingEntitlements);
         }
 
         dto.ExportDaasEntitlements = results;
         return dto;
+    }
+
+    private async Task<List<DaasEntitlementExportModel>> GetMissingEntitlementsForBatchMembersAsync(DaasEntitlementsFilterModel filterModel,
+        IQueryable<DaasEntitlement> entitlements, DaasEntitlementsDto dto)
+    {
+        await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+        var missingEntitlements = new List<DaasEntitlementExportModel>();
+        switch (dto.ThisBatch!.BatchTarget)
+        {
+            case ReportBatchTarget.EmployeeId:
+                foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
+                {
+                    missingEntitlements.Add(new DaasEntitlementExportModel()
+                    {
+                        UserName = "",
+                        EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
+                        DaasName = "NotFound",
+                        MachineType = "NotFound"
+                    });
+                }
+
+                break;
+            case ReportBatchTarget.LanId:
+                foreach (var missingEntry in dto.ThisBatchMissingEntries.Where(e => !string.IsNullOrWhiteSpace(e)))
+                {
+                    missingEntitlements.Add(new DaasEntitlementExportModel()
+                    {
+                        UserName = missingEntry,
+                        EmployeeId = Convert.ToInt32(Regex.Match(missingEntry!, @"\d+").Value),
+                        DaasName = "NotFound",
+                        MachineType = "NotFound"
+                    });
+                }
+
+                break;
+        }
+
+        return missingEntitlements;
     }
 
     private async Task GetBatchMembersMissingFromFilteredData(Guid batchId,
