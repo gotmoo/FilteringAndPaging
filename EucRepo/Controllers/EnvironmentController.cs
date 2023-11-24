@@ -1,10 +1,8 @@
 using System.Globalization;
-using AutoMapper;
 using CsvHelper;
 using EucRepo.Interfaces;
 using EucRepo.ModelsFilter;
 using EucRepo.ModelsView;
-using EucRepo.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
