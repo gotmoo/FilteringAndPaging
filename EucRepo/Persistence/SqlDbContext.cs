@@ -39,7 +39,7 @@ public class SqlDbContext : DbContext
         
         modelBuilder.Entity<UtilityCalendarDay>().HasKey(p => new { p.Date });
         modelBuilder.Entity<UtilityCalendarDay>().Property(p => p.Date).HasColumnType("date");
-
+     
       
 
         //Views

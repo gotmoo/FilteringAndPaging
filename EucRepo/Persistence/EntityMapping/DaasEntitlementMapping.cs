@@ -17,6 +17,10 @@ public class DaasEntitlementMapping :IEntityTypeConfiguration<DaasEntitlement>
         
         //Tables with triggers need to be declared so an older, slower access method can be used. .Net7 breaking change.
         //builder.ToTable(tb => tb.HasTrigger($"trg_{tb.Name}_Log"));
+        builder.HasIndex(p => p.UserName)
+            .IsClustered(false);
+        builder.HasIndex(p => new{p.UserName, p.Os})
+            .IsClustered(false);
 
     }
 }
@@ -30,7 +34,7 @@ public class DaasEntitlementLogMapping :IEntityTypeConfiguration<DaasEntitlement
         // builder.Property(p => p.LogAction).IsUnicode(false);
         // builder.Property(p => p.EmployeeStatus).IsUnicode(false);
         builder.Property(p => p.AdEnabled).HasDefaultValue(false);
-        // builder.Property(p => p.UserName).IsUnicode(false);
+        builder.Property(p => p.UserName).IsUnicode(false);
         // builder.Property(p => p.AdGroup).IsUnicode(false);
         // builder.Property(p => p.DaasName).IsUnicode(false);
         // builder.Property(p => p.MachineType).IsUnicode(false);
@@ -39,5 +43,6 @@ public class DaasEntitlementLogMapping :IEntityTypeConfiguration<DaasEntitlement
         builder.Property(p => p.Provisioned).HasColumnType("date");
         builder.Property(p => p.DaysActive).HasDefaultValue(0);
         builder.Property(p => p.LastSeen).HasColumnType("date");
+
     }
 }
