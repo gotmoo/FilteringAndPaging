@@ -50,6 +50,12 @@ namespace EucRepo.TagHelpers
         {
             output.TagMode = TagMode.StartTagAndEndTag;
             SearchOptions ??= Array.Empty<string>();
+            var firstOption = new TagBuilder("option");
+            firstOption.InnerHtml.Append("");
+            firstOption.TagRenderMode = TagRenderMode.Normal;
+            output.PostContent.AppendHtml(firstOption.RenderStartTag());
+            output.PostContent.AppendHtml(firstOption.RenderBody());
+            output.PostContent.AppendHtml(firstOption.RenderEndTag());
             foreach (var item in SearchOptions)
             {
                 var listOption = new TagBuilder("option");
