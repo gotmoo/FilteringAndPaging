@@ -27,6 +27,7 @@ namespace EucRepo.Controllers
             var adGroups = new[] { "GroupA", "GroupB", "GroupC", "GroupD", "GroupE" };
             var daasNames = new[] { "Persistent", "Non-persistent" };
             var machineTypes = new[] { "PRI", "NPP" };
+            var osVersion = new[] { "Win10", "Win11" };
             var DcPair = new[] { "EastUS", "EMEA", "APAC" };
             var userNamePrefix = new[] { "e", "a", "p" };
             var entitlementIds = 1;
@@ -41,7 +42,7 @@ namespace EucRepo.Controllers
                     .RuleFor(e => e.AdGroup, f => f.PickRandom(adGroups))
                     .RuleFor(e => e.DaasName, f => f.PickRandom(daasNames))
                     .RuleFor(e => e.MachineType, f => f.PickRandom(machineTypes))
-                    .RuleFor(e => e.Os, "Win10")
+                    .RuleFor(e => e.Os, f => f.PickRandom(osVersion))
                     .RuleFor(e => e.DcPair, f => f.PickRandom(DcPair))
                     .RuleFor(e => e.Provisioned, f => DateTime.UtcNow.AddDays(-f.Random.Int(0, 90)).Date)
                     .RuleFor(e => e.DaysActive, f => f.Random.Int(0, 40))
@@ -71,8 +72,8 @@ namespace EucRepo.Controllers
             CreateBatch(ReportBatchTarget.EmployeeId, 50, new Guid("9AEEDE2D-5DBD-4A8E-898F-021756B83297"), "50 Employees Read-only");
             CreateBatch(ReportBatchTarget.LanId, 50, new Guid("830EA165-A451-4A99-AB8F-57129593E5CC"), "50 Users View-only");
             CreateBatch(ReportBatchTarget.LanId, 50, new Guid("1DC35B30-AF0F-4BBA-AFA7-EE799217DFD0"), "50 Users No-Access");
-            CreateBatch(ReportBatchTarget.EmployeeId, 5000, null, null);
-            CreateBatch(ReportBatchTarget.LanId, 5000, null, null);
+            CreateBatch(ReportBatchTarget.EmployeeId, 15000, null, "15000 Employees");
+            CreateBatch(ReportBatchTarget.LanId, 15000, null, "15000 Users");
 
             //No Access
             var modifyBatch1 =
