@@ -88,8 +88,9 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
                 dto.BatchRequestError = "You don't have access to this batch.";
                 return dto;
             }
-
-            dto.ReportBatches.Add(dto.ThisBatch);
+            if (dto.ReportBatches.All(r => r.Id != dto.ThisBatch.Id))
+                dto.ReportBatches.Add(dto.ThisBatch);
+            
             entitlements =
                 await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements,
                     callingPage);
