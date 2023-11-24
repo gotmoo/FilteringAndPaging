@@ -100,7 +100,7 @@ public class BatchController : Controller
     }
 
     [HttpPost]
-    [Route("/[controller]/Manage/{id:Guid}")]
+    [Route("/[controller]/Manage/{id:guid}")]
     public async Task<IActionResult> Manage([FromForm] ReportBatchForm reportBatch, [FromRoute] Guid id)
     {
         if (!ModelState.IsValid)
