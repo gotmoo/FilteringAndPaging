@@ -10,6 +10,7 @@ public class DaasEntitlementsDto
     public int FilteredRecords { get; set; }
     public ReportBatch? ThisBatch { get; set; }
     public string? ThisBatchAccess { get; set; } = null;
+    public string? BatchRequestError { get; set; } = null;
     public List<string> ThisBatchMissingEntries { get; set; } = new();
 
     public List<ReportBatch> ReportBatches { get; set; } = new();

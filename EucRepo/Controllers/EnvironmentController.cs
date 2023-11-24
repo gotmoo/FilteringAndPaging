@@ -27,45 +27,36 @@ public class EnvironmentController : Controller
     public async Task<IActionResult> Entitlements([FromQuery] DaasEntitlementsFilterModel? filterSort)
     {
         filterSort ??= new DaasEntitlementsFilterModel();
+        filterSort.Page ??= 1;
         var userName = User.Identity?.Name??"";
         var dataRefreshTime = DateTime.Now;
+
+      
+        var dto = await _daasEntitlement.GetEntitlementsWithPagingAsync(filterSort, userName, "Entitlements");
+        
+        if (dto.BatchRequestError is not null)
+            return BadRequest(dto.BatchRequestError);
 
         var viewModel = new DaasEntitlementsViewModel
         {
             FilterModel = filterSort,
-            DataRefreshTime = dataRefreshTime
+            DataRefreshTime = dataRefreshTime,
+            TotalRecords = dto.TotalRecords,
+            Batches = dto.ReportBatches,
+            ThisBatch = dto.ThisBatch,
+            SearchParams = GetSearchParamsForPagingButtons(filterSort),
+            SearchOptions = dto.SearchOptions,
+            FilteredRecords = dto.FilteredRecords,
+
+            BatchMissingEntries = dto.ThisBatchMissingEntries,
+            DaasEntitlements = dto.PaginatedList,
+            StartRecord = dto.PaginatedList!.StartRecord,
+            EndRecord = dto.PaginatedList.EndRecord,
+            FirstPage = filterSort.Page == 1,
+            LastPage = dto.FilteredRecords == dto.PaginatedList.EndRecord,
+            TotalPages = dto.PaginatedList.TotalPages,
         };
-        if (filterSort.Batch is not null)
-        {
-            viewModel.ThisBatch = await _daasEntitlement.GetBatchByIdAsync(filterSort.Batch);
-            if (viewModel.ThisBatch is null)
-                return BadRequest("The provided batch is not found.");
 
-            if (!viewModel.ThisBatch.CanView(userName) && !viewModel.ThisBatch.IsVisibleWithLink)
-                return BadRequest("You don't have access to this batch.");
-        }
-
-       
-        var dto = await _daasEntitlement.GetEntitlementsWithPagingAsync(filterSort, userName, "Entitlements");
-
-        viewModel.TotalRecords = dto.TotalRecords;
-        viewModel.Batches = dto.ReportBatches;
-
-        //Store search params for paging buttons. Loop through each of the populated values and store in dictionary
-        viewModel.SearchParams = GetSearchParamsForPagingButtons(viewModel.FilterModel);
-        viewModel.SearchOptions = dto.SearchOptions;
-        viewModel.FilteredRecords = dto.FilteredRecords;
-
-        viewModel.BatchMissingEntries = dto.ThisBatchMissingEntries;
-
-        //Paging
-        viewModel.DaasEntitlements = dto.PaginatedList;
-        viewModel.StartRecord = dto.PaginatedList!.StartRecord;
-        viewModel.EndRecord = dto.PaginatedList.EndRecord;
-        viewModel.FirstPage = viewModel.FilterModel.Page == 1;
-        viewModel.LastPage = viewModel.FilteredRecords == dto.PaginatedList.EndRecord;
-        viewModel.TotalPages = dto.PaginatedList.TotalPages;
-        viewModel.FilterModel.Page = viewModel.FilterModel.Page ?? 1;
         List<int> pageSizes = new List<int>
         {
             10,

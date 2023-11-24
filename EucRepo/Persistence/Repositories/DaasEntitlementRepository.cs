@@ -38,7 +38,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
     private async Task<List<ReportBatch>> GetBatchForUserAsync(string userName)
     {
-        var batches  = await _context.ReportBatches.AsNoTracking()
+        var batches = await _context.ReportBatches.AsNoTracking()
             .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
             .Where(e =>
                 _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
@@ -49,7 +49,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return batches;
     }
 
-   
+
     private async Task AddBatchRequestLogAsync(ReportBatch batch, string userName, string page)
     {
         _context.ReportBatchRequests.Add(new ReportBatchRequest
@@ -59,8 +59,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
             Requested = DateTime.UtcNow,
             Page = page
         });
-        await _context.SaveChangesAsync();    
-        
+        await _context.SaveChangesAsync();
     }
 
     public async Task<DaasEntitlementsDto> GetEntitlementsWithPagingAsync(DaasEntitlementsFilterModel filterModel,
@@ -73,8 +72,27 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
         //Manage initial batch filtering
         dto.ReportBatches = await GetBatchForUserAsync(userName);
+
         if (filterModel.Batch is not null)
-           entitlements = await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements, callingPage);
+        {
+            //Validate access to the batch
+            dto.ThisBatch = await GetBatchByIdAsync(filterModel.Batch);
+            if (dto.ThisBatch is null)
+            {
+                dto.BatchRequestError = "The provided batch is not found.";
+                return dto;
+            }
+
+            if (!dto.ThisBatch.CanView(userName) && !dto.ThisBatch.IsVisibleWithLink)
+            {
+                dto.BatchRequestError = "You don't have access to this batch.";
+                return dto;
+            }
+            dto.ReportBatches.Add(dto.ThisBatch);
+            entitlements =
+                await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements,
+                    callingPage);
+        }
 
         entitlements = FilterEntitlements(filterModel, entitlements);
         entitlements = SortDaasEntitlements(filterModel, entitlements);
@@ -84,7 +102,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
         // Identify items from the batch that are not included in the final filtered set
         if (filterModel.Batch is not null)
-             await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+            await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
 
         //Paging
         dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements,
@@ -93,7 +111,8 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return dto;
     }
 
-    public async Task<DaasEntitlementsDto> GetEntitlementsAsync(DaasEntitlementsFilterModel filterModel, string userName, string callingPage)
+    public async Task<DaasEntitlementsDto> GetEntitlementsAsync(DaasEntitlementsFilterModel filterModel,
+        string userName, string callingPage)
     {
         var dto = new DaasEntitlementsDto();
 
@@ -103,7 +122,9 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
         //Manage initial batch filtering
         if (filterModel.Batch is not null)
-            entitlements = await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements, callingPage);
+            entitlements =
+                await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements,
+                    callingPage);
 
         entitlements = FilterEntitlements(filterModel, entitlements);
         entitlements = SortDaasEntitlements(filterModel, entitlements);
@@ -121,7 +142,8 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return dto;
     }
 
-    private async Task<List<DaasEntitlementExportModel>> GetMissingEntitlementsForBatchMembersAsync(DaasEntitlementsFilterModel filterModel,
+    private async Task<List<DaasEntitlementExportModel>> GetMissingEntitlementsForBatchMembersAsync(
+        DaasEntitlementsFilterModel filterModel,
         IQueryable<DaasEntitlement> entitlements, DaasEntitlementsDto dto)
     {
         await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
@@ -208,7 +230,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         }
 
         await AddBatchRequestLogAsync(dto.ThisBatch, userName, callingPage);
-        
+
         return entitlements;
     }
 
@@ -218,13 +240,14 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
             .Where(r => r.ReportBatch.Id == reportBatchId)
             .Select(r => r.LanId).AsQueryable();
     }
+
     private IQueryable<int?> GetReportBatchEmployeeIds(Guid reportBatchId)
     {
         return _context.ReportBatchMembers
             .Where(r => r.ReportBatch.Id == reportBatchId)
             .Select(r => r.EmployeeId).AsQueryable();
     }
-    
+
     private static IQueryable<DaasEntitlement> FilterEntitlements(DaasEntitlementsFilterModel filterModel,
         IQueryable<DaasEntitlement> entitlements)
     {
@@ -288,7 +311,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
 
         return entitlements;
     }
-    
+
     private static IQueryable<DaasEntitlement> SortDaasEntitlements(DaasEntitlementsFilterModel filterModel,
         IQueryable<DaasEntitlement> entitlements)
     {
@@ -365,10 +388,9 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
             filterListOptions.OrderBy(d => d.DcPair).Select(d => d.DcPair).Distinct().ToArray()!);
         searchOptions.Add("MachineType",
             filterListOptions.OrderBy(d => d.MachineType).Select(d => d.MachineType).Distinct().ToArray()!);
-        searchOptions.Add("Os", 
+        searchOptions.Add("Os",
             filterListOptions.OrderBy(d => d.Os).Select(d => d.Os).Distinct().ToArray()!);
 
         return searchOptions;
-
     }
 }
