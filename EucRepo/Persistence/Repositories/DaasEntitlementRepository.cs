@@ -88,6 +88,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
                 dto.BatchRequestError = "You don't have access to this batch.";
                 return dto;
             }
+
             dto.ReportBatches.Add(dto.ThisBatch);
             entitlements =
                 await FilterEntitlementsOnBatchMembers((Guid)filterModel.Batch, userName, dto, entitlements,
@@ -101,8 +102,8 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         dto.SearchOptions = await GetFilterListOptionsAsync(entitlements);
 
         // Identify items from the batch that are not included in the final filtered set
-        if (filterModel.Batch is not null)
-            await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+        if (dto.ThisBatch is not null)
+            dto.ThisBatchMissingEntries = await GetBatchMembersMissingFromFilteredData(entitlements, dto);
 
         //Paging
         dto.PaginatedList = await PaginatedList<DaasEntitlement>.CreateAsync(entitlements,
@@ -146,7 +147,7 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         DaasEntitlementsFilterModel filterModel,
         IQueryable<DaasEntitlement> entitlements, DaasEntitlementsDto dto)
     {
-        await GetBatchMembersMissingFromFilteredData((Guid)filterModel.Batch, entitlements, dto);
+        dto.ThisBatchMissingEntries = await GetBatchMembersMissingFromFilteredData(entitlements, dto);
         var missingEntitlements = new List<DaasEntitlementExportModel>();
         switch (dto.ThisBatch!.BatchTarget)
         {
@@ -181,30 +182,31 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
         return missingEntitlements;
     }
 
-    private async Task GetBatchMembersMissingFromFilteredData(Guid batchId,
+    private async Task<List<string>> GetBatchMembersMissingFromFilteredData(
         IQueryable<DaasEntitlement> entitlements, DaasEntitlementsDto dto)
     {
         var entitlementsMissingCheck = entitlements;
         switch (dto.ThisBatch!.BatchTarget)
         {
             case ReportBatchTarget.EmployeeId:
-                dto.ThisBatchMissingEntries = await GetReportBatchEmployeeIds(batchId)
+                return await GetReportBatchEmployeeIds(dto.ThisBatch.Id)
                     .Select(b => b!.Value)
                     .Where(b =>
                         !entitlementsMissingCheck.Select(e => e.EmployeeId)
                             .Contains(b)).Select(i => i.ToString())
-                    .Where(e => !string.IsNullOrWhiteSpace(e))
-                    .ToListAsync();
+                    .Where(e => !string.IsNullOrWhiteSpace(e)).ToListAsync();
                 break;
             case ReportBatchTarget.LanId:
-                var nullableResults = await GetReportBatchUserNames(batchId)!
+                var nullableResults = await GetReportBatchUserNames(dto.ThisBatch.Id)!
                     .Where(b =>
                         !entitlementsMissingCheck.Select(e => e.UserName)
                             .Contains(b))
                     .Where(e => !string.IsNullOrWhiteSpace(e))
                     .ToListAsync();
-                dto.ThisBatchMissingEntries = nullableResults!;
+                return nullableResults!;
                 break;
+            default:
+                return new List<string>();
         }
     }
 
@@ -238,14 +240,14 @@ public class DaasEntitlementRepository : IDaasEntitlementRepository
     {
         return _context.ReportBatchMembers
             .Where(r => r.ReportBatch.Id == reportBatchId)
-            .Select(r => r.LanId).AsQueryable();
+            .Select(r => r.LanId).Distinct().AsQueryable();
     }
 
     private IQueryable<int?> GetReportBatchEmployeeIds(Guid reportBatchId)
     {
         return _context.ReportBatchMembers
             .Where(r => r.ReportBatch.Id == reportBatchId)
-            .Select(r => r.EmployeeId).AsQueryable();
+            .Select(r => r.EmployeeId).Distinct().AsQueryable();
     }
 
     private static IQueryable<DaasEntitlement> FilterEntitlements(DaasEntitlementsFilterModel filterModel,
