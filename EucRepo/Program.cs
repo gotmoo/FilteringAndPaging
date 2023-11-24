@@ -28,6 +28,7 @@ builder.Services.AddDbContext<SqlDbContext>(options =>
 builder.Services.Configure<ApiCallSettings>(builder.Configuration.GetSection(ApiCallSettings.Key));
 builder.Services.AddAutoMapper(typeof(Program));
 builder.Services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+builder.Services.AddScoped<IBatchRepository, BatchRepository>();
 builder.Services.AddScoped<IDaasEntitlementRepository, DaasEntitlementRepository>();
 
 builder.Services.AddControllersWithViews();

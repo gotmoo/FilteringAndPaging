@@ -1,61 +1,42 @@
-using System.Diagnostics;
 using EucRepo.Helpers;
+using EucRepo.Interfaces;
 using EucRepo.Models;
 using EucRepo.ModelsView;
-using EucRepo.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
 
 namespace EucRepo.Controllers;
 
 [Authorize]
 public class BatchController : Controller
 {
-    private readonly SqlDbContext _context;
+    private readonly IBatchRepository _batchRepository;
 
-    // GET
-    public BatchController(SqlDbContext context)
+    public BatchController( IBatchRepository batchRepository)
     {
-        _context = context;
+        _batchRepository = batchRepository;
     }
 
     [Authorize]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
         var userName = User.Identity?.Name;
-        var batches = _context.ReportBatches
-            .Include(r => r.Owners)
-            .Include(r => r.Viewers).AsSplitQuery()
-            .Include(r => r.Members)
-            .Where(e => e.BatchTarget == ReportBatchTarget.EmployeeId || e.BatchTarget == ReportBatchTarget.LanId)
-            .Where(e =>
-                _context.ReportBatchOwners.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                    .Contains(userName) ||
-                _context.ReportBatchViewers.Where(o => o.ReportBatch.Id == e.Id).Select(o => o.UserName)
-                    .Contains(userName)
-            ).ToList();
 
         var viewModel = new BatchListViewModel()
         {
-            ReportBatches = batches
+            ReportBatches = await _batchRepository.GetAllBatchesForCurrentUserAsync(userName)
         };
         return View(viewModel);
     }
 
     [Authorize]
-    public IActionResult View(Guid id, string view = "full")
+    public async Task<IActionResult> View(Guid id, string view = "full")
     {
-        var thisUser = User.Identity?.Name ?? "";
-        var batch = _context.ReportBatches
-            .Include(r => r.Owners)
-            .Include(r => r.Viewers).AsSplitQuery()
-            .Include(r => r.Members)
-            .FirstOrDefault(r => r.Id == id);
+        var userName = User.Identity?.Name;
+        var batch = await _batchRepository.GetBatchByIdAsync(id);
         if (batch is null)
             return NotFound($"Batch with id {id} not found.");
-        if (!batch.CanView(thisUser))
+        if (!batch.CanView(userName))
             return Unauthorized($"Not allowed to access {batch.DisplayName}: {id}.");
         if (view == "partial")
             return PartialView(batch);
@@ -72,7 +53,7 @@ public class BatchController : Controller
 
     [Authorize]
     [Route("/[controller]/Manage/{id:guid?}")]
-    public IActionResult Manage([FromRoute] Guid? id)
+    public async Task<IActionResult> Manage([FromRoute] Guid? id)
     {
         if (id == null)
         {
@@ -91,17 +72,9 @@ public class BatchController : Controller
         }
 
 
-        var batch = _context.ReportBatches
-            .Where(b => b.Id == id)
-            .Include(b => b.Members)
-            .Include(b => b.Viewers)
-            .Include(b => b.Owners)
-            .FirstOrDefault();
+        var batch = await _batchRepository.GetBatchByIdAsync(id.Value);
         if (batch is null)
             return RedirectToAction("Index");
-
-        // if (!batch.CanEdit())
-        //     return RedirectToAction("View", new{id});
 
         var batchMembers = batch!.BatchTarget == ReportBatchTarget.EmployeeId
             ? batch.Members.Select(b => b.EmployeeId.ToString())
@@ -122,13 +95,13 @@ public class BatchController : Controller
             Viewers = batch.Viewers.Select(o => o.UserName).JoinToList(),
             Message = null
         };
-        var x = batch.Owners.Select(o => o.UserName);
+
         return View(batchVm);
     }
 
     [HttpPost]
-    [Route("/[controller]/Manage/{id:guid?}")]
-    public async Task<IActionResult> Manage([FromForm] ReportBatchForm reportBatch, [FromRoute] Guid? id)
+    [Route("/[controller]/Manage/{id:Guid}")]
+    public async Task<IActionResult> Manage([FromForm] ReportBatchForm reportBatch, [FromRoute] Guid id)
     {
         if (!ModelState.IsValid)
         {
@@ -139,82 +112,17 @@ public class BatchController : Controller
             return BadRequest($"Model not valid:\n{string.Join("\n", errorMessages)}");
         }
 
-        var batch = _context.ReportBatches.FirstOrDefault(b => b.Id == reportBatch.Id);
-        if (batch is null)
-        {
-            Debug.Assert(reportBatch != null, nameof(reportBatch) + " != null");
-            batch = new ReportBatch
-            {
-                Id = reportBatch.Id,
-                Name = reportBatch?.Name ?? "",
-                Description = reportBatch?.Description ?? "",
-                IsManaged = reportBatch!.IsManaged,
-                IsVisibleWithLink = reportBatch!.IsVisibleWithLink,
-                BatchTarget = reportBatch.BatchTarget,
-                Created = DateTime.UtcNow,
-                CreatedBy = reportBatch.CreatedBy,
-                Members = new List<ReportBatchMember>(),
-                Viewers = new List<ReportBatchViewer>(),
-                Owners = new List<ReportBatchOwner>()
-            };
+        var result = await _batchRepository.UpdateBatchByIdFromReportBatchFormAsync(id, reportBatch);
 
-            _context.ReportBatches.Add(batch);
-            await _context.SaveChangesAsync();
-            reportBatch.NewBatch = false;
-        }
-        else
-        {
-            await _context.ReportBatchMembers.Where(b => b.ReportBatch == batch).ExecuteDeleteAsync();
-            await _context.ReportBatchOwners.Where(b => b.ReportBatch == batch).ExecuteDeleteAsync();
-            await _context.ReportBatchViewers.Where(b => b.ReportBatch == batch).ExecuteDeleteAsync();
-            batch = _context.ReportBatches.First(b => b.Id == reportBatch.Id);
-            batch.Name = reportBatch.Name ?? "";
-            batch.Description = reportBatch.Description ?? "";
-            batch.BatchTarget = reportBatch.BatchTarget;
-            batch.IsManaged = reportBatch.IsManaged;
-            batch.IsVisibleWithLink = reportBatch.IsVisibleWithLink;
-        }
-
-        foreach (var item in reportBatch.Owners.SplitToStringArray().Where(s => !string.IsNullOrWhiteSpace(s)))
-        {
-            batch.Owners.Add(new ReportBatchOwner() { UserName = item });
-        }
-
-        foreach (var item in reportBatch.Viewers.SplitToStringArray().Where(s => !string.IsNullOrWhiteSpace(s)))
-        {
-            batch.Viewers.Add(new ReportBatchViewer() { UserName = item });
-        }
-
-        foreach (var item in reportBatch.Members.SplitToStringArray().Where(s => !string.IsNullOrWhiteSpace(s)))
-        {
-            if (batch.BatchTarget == ReportBatchTarget.EmployeeId && int.TryParse(item, out int parsedId))
-            {
-                batch.Members.Add(new ReportBatchMember() { EmployeeId = parsedId });
-            }
-
-            if (batch.BatchTarget == ReportBatchTarget.LanId)
-            {
-                batch.Members.Add(new ReportBatchMember() { LanId = item });
-            }
-        }
-
-        await _context.SaveChangesAsync();
-        reportBatch.NewBatch = false;
-
-        return View(reportBatch);
+        return View(result);
     }
 
     [Authorize]
     [HttpGet]
-    public IActionResult Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id)
     {
         var thisUser = User.Identity?.Name ?? "";
-        var batch = _context.ReportBatches
-            .Include(r => r.Owners)
-            .Include(r => r.Viewers).AsSplitQuery()
-            .Include(r => r.Members).AsSplitQuery()
-            .Include(r => r.Requests)
-            .FirstOrDefault(r => r.Id == id);
+        var batch = await _batchRepository.GetBatchByIdAsync(id);
         if (batch is null)
             return RedirectToAction("Index");
         if (!batch.CanEdit(thisUser))
@@ -226,24 +134,11 @@ public class BatchController : Controller
     [Authorize]
     [HttpPost]
     [Route("[Controller]/Delete/{id:guid}")]
-    public IActionResult DeletePost(Guid id)
+    public async Task<IActionResult> DeletePost(Guid id)
     {
         var thisUser = User.Identity?.Name ?? "";
-        var batch = _context.ReportBatches
-            .Include(r => r.Owners)
-            .FirstOrDefault(r => r.Id == id);
-        if (batch is null)
-            return RedirectToAction("Index");
-        if (!batch.CanEdit(thisUser))
-            return RedirectToAction("Index");
-        // ReSharper disable MethodHasAsyncOverload
-        _context.ReportBatchMembers.Where(b => b.ReportBatch == batch).ExecuteDelete();
-        _context.ReportBatchViewers.Where(b => b.ReportBatch == batch).ExecuteDelete();
-        _context.ReportBatchRequests.Where(b => b.ReportBatch == batch).ExecuteDelete();
-        _context.ReportBatches.Remove(batch);
-        _context.SaveChanges();
+        await _batchRepository.DeleteBatchByIdAsync(id, thisUser);
+        
         return RedirectToAction("Index");
     }
-
-    
 }
